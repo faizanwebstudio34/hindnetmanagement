@@ -46,7 +46,7 @@ const patch=(id,f)=>saveLaptop({...L.find(x=>x.id===id),...f});
 async function delLaptop(id){if(!confirm('Delete this entry permanently?'))return;await Store.del('laptops',id);await Store.del('catalog',id);closeM();toast('Entry deleted')}
 const catalogURL=()=>new URL('catalog.html',location.href).href;
 const copyLink=()=>navigator.clipboard.writeText(catalogURL()).then(()=>toast('Customer link copied'));
-function shareWA(id){const l=L.find(x=>x.id===id);open('https://wa.me/?text='+encodeURIComponent(`${l.brand} ${l.model}\n${l.spec||''}\nPrice: ${money(l.sellPrice)}\nView: ${catalogURL()}`))}
+function shareWA(id){const l=L.find(x=>x.id===id);open('https://wa.me/?text='+encodeURIComponent(`${l.brand} ${l.model}\n${l.spec||''}\nPrice: ${money(l.sellPrice)}\nView: ${catalogURL()}#${id}`))}
 const match=(l,q)=>!q||[l.serial,l.brand,l.model,l.spec,l.account,l.order,l.source].join(' ').toLowerCase().includes(q.toLowerCase());
 const row=(l,fn='showDetail')=>`<div class="card item" onclick="${fn}('${l.id}')">${l.thumb?`<img loading="lazy" src="${l.thumb}">`:'<div class="ph"></div>'}<div class="m"><div><b>${esc(l.brand)} ${esc(l.model)}</b></div><div class="sub">SN: ${esc(l.serial)}</div><div class="sub">${esc(l.source)} · ${fdate(l.date)}${l.price?' · '+money(l.price):''}</div></div><span class="tag ${l.status==='sold'?'sd':'ok'}">${l.status==='sold'?'Sold':'Available'}</span></div>`;
 
