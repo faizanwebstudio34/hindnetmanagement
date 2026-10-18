@@ -60,7 +60,7 @@ async function scanRun(files){
   const o=$('#sc_out');o.innerHTML='<div class="sub" style="margin-top:12px">Reading label…</div><div class="pgb"><i id="pg" style="width:40%"></i></div>';
   const codes=[];for(const f of files)codes.push(...await readCodes(f));
   let res=null,src='ai',why='';
-  try{res=await aiScan(files,codes)}catch(e){src='ocr';why=e.status===501?'AI scan is not set up on the server yet.':e.status===401?'Please log in again.':'AI scan is unavailable right now.'}
+  try{res=await aiScan(files,codes)}catch(e){src='ocr';why=e.status===501?'AI scan is not set up on the server yet.':e.status===401?'Please log in again.':e.status===429?'The free AI limit was reached for now. Wait a minute and try again.':'AI scan is unavailable right now.'}
   if(!res){
     let text='';try{text=await ocrScan(files[0])}catch(e){}
     if(!text&&!codes.length){o.innerHTML=`<div class="sub" style="color:var(--no);margin-top:12px">Could not read the label. ${esc(why)} Try a sharper, brighter photo, or enter the details manually.</div>`;return}

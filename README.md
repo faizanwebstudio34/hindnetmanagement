@@ -17,8 +17,10 @@
 
 Without a config the app runs in local mode (data stays in this browser only).
 
-## AI label scan (accurate, optional but recommended)
-The "Scan label to auto-fill details" button sends the photo to `/api/scan` (a Vercel serverless function) which reads it with Claude vision. Barcodes decoded in the browser are used to double-check the serial number. If the function is not configured, the app falls back to offline OCR (less accurate).
-1. Create an API key at console.anthropic.com (API usage is billed separately from a Claude.ai subscription).
-2. Vercel → Project → Settings → Environment Variables, add: `ANTHROPIC_API_KEY`, `FIREBASE_API_KEY` (same value as `apiKey` in `js/config.js`); optional `OWNER_EMAIL`, `CLAUDE_MODEL`. See `.env.example`.
+## AI label scan (free with Google Gemini)
+The "Scan label to auto-fill details" button sends the photo to `/api/scan` (a Vercel serverless function) which reads it with Google Gemini. Barcodes decoded in the browser are used to double-check the serial number. If the function is not configured or the free limit is reached, the app falls back to offline OCR (less accurate).
+1. Open aistudio.google.com, sign in and create an API key (no billing needed for the free tier). Check your project's free limits in the AI Studio rate-limit page.
+2. Vercel → Project → Settings → Environment Variables, add: `GEMINI_API_KEY`, `FIREBASE_API_KEY` (same value as `apiKey` in `js/config.js`); optional `OWNER_EMAIL`, `GEMINI_MODEL`. See `.env.example`.
 3. Redeploy. Only the logged-in owner can call the function.
+
+Note: on the free tier Google may use the submitted images to improve its products. Only photograph labels, not people or personal documents.
