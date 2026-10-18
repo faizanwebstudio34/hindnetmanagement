@@ -63,3 +63,5 @@ label{font-weight:500}
 .stats b{font-size:22px;font-weight:650;margin-bottom:2px}
 .tag{font-weight:500}
 .nopic{font-size:13px;color:var(--mut)}
+
+.pgb{height:6px;background:var(--bd);border-radius:4px;margin-top:10px;overflow:hidden}.pgb i{display:block;height:100%;width:0;background:var(--pri);transition:width .2s}
