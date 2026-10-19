@@ -50,12 +50,12 @@ function draw(){
     :`<div class="empty">${ci('laptop',56)}<h3>${C.length?'No laptops match your filters':'New stock is arriving soon'}</h3><p>${C.length?'Try a different search or clear the filters.':'Please check back shortly or message us on WhatsApp.'}</p></div>`;
   reveal();
 }
+const gal=(ph,l)=>`<div class="mi" id="mi" onclick="$('#mi').classList.toggle('zm')" onmousemove="zoomMove(event)">${ph.length?`<img id="mimg" src="${ph[0]}" alt="${esc(l.brand+' '+l.model)}">`:ci('laptop',72)}</div>${ph.length>1?`<div class="ths">${ph.map((p,i)=>`<button class="th ${i?'':'on'}" onclick="swapImg(this)"><img src="${p}" alt=""></button>`).join('')}</div>`:''}`;
 function cdet(id){
   const l=C.find(x=>x.id===id);if(!l)return;history.replaceState(null,'','#'+id);
   const ph=l.photos?.length?l.photos:(l.thumb?[l.thumb]:[]),kv=(k,v)=>v?`<div class="kv"><span>${k}</span><b>${esc(v)}</b></div>`:'',d=days(l.createdAt);
   $('#ov').innerHTML=`<div class="cmo" onclick="if(event.target===this)closeD()"><div class="cmd" role="dialog" aria-modal="true"><button class="x" onclick="closeD()" aria-label="Close">${ci('x',20)}</button>
-  <div class="cg"><div><div class="mi" id="mi" onclick="$('#mi').classList.toggle('zm')" onmousemove="zoomMove(event)">${ph.length?`<img id="mimg" src="${ph[0]}" alt="${esc(l.brand+' '+l.model)}">`:ci('laptop',72)}</div>
-  ${ph.length>1?`<div class="ths">${ph.map((p,i)=>`<button class="th ${i?'':'on'}" onclick="swapImg(this)"><img src="${p}" alt=""></button>`).join('')}</div>`:''}</div>
+  <div class="cg"><div id="gl">${gal(ph,l)}</div>
   <div class="ci"><div class="br">${esc(l.brand)}</div><h2>${esc(l.model)}</h2><div class="price big">${l.sellPrice?money(l.sellPrice):'Ask for price'}</div>
   <div class="chp">${specs(l).map(s=>`<span>${esc(s)}</span>`).join('')}</div>
   <div class="kvs">${kv('Condition',l.condition)}${kv('Warranty',l.warranty)}${kv('Listed',d<1?'Today':d+(d===1?' day ago':' days ago'))}</div>
@@ -63,6 +63,7 @@ function cdet(id){
   <button class="btn" onclick="shareL('${id}')">${ci('share')} Share</button><button class="btn" id="sbtn" data-id="${id}" onclick="toggleSave('${id}')">${ci('heart',18,sv(id)?'currentColor':'none')} ${sv(id)?'Saved':'Save'}</button></div>
   <p class="note">Price and availability are subject to change. Please message us to confirm before visiting.</p></div></div></div></div>`;
   document.body.style.overflow='hidden';
+  if(!(l.photos&&l.photos.length)&&l.photoCount>0)Store.get('photos',id).then(d=>{const g=$('#gl');if(g&&d&&d.list&&d.list.length)g.innerHTML=gal(d.list,l)}).catch(()=>{});
 }
 function zoomMove(e){const m=$('#mi'),i=$('#mimg');if(!i||!m.classList.contains('zm'))return;const r=m.getBoundingClientRect();i.style.transformOrigin=((e.clientX-r.left)/r.width*100)+'% '+((e.clientY-r.top)/r.height*100)+'%'}
 function swapImg(b){$('#mimg').src=b.firstElementChild.src;document.querySelectorAll('.th').forEach(x=>x.classList.toggle('on',x===b))}

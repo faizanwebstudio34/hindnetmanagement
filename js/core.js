@@ -4,8 +4,9 @@ const today=()=>new Date().toISOString().slice(0,10);
 const money=n=>n||n===0?'₹'+Number(n).toLocaleString('en-IN'):'-';
 const fdate=d=>d?new Date(d).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'-';
 const mp=n=>n?money(n):'-';
+const debounce=(f,ms=120)=>{let t;return(...a)=>{clearTimeout(t);t=setTimeout(()=>f(...a),ms)}};
 const days=d=>Math.max(0,Math.floor((Date.now()-new Date(d||Date.now()))/864e5));
-const LS={get:k=>JSON.parse(localStorage.getItem(k)||'null'),set:(k,v)=>localStorage.setItem(k,JSON.stringify(v))};
+const LS={get:k=>JSON.parse(localStorage.getItem(k)||'null'),set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){toast('Browser storage is full. Connect Firebase to store photos.');throw e}}};
 const setTheme=t=>{document.documentElement.dataset.theme=t;localStorage.setItem('theme',t)};
 const toggleTheme=()=>setTheme(document.documentElement.dataset.theme==='dark'?'light':'dark');
 setTheme(localStorage.getItem('theme')||'light');
@@ -29,37 +30,45 @@ const Store={
     if(FB)return db.collection(col).doc(id).delete();
     const a=(LS.get(col)||[]).filter(x=>x.id!==id);LS.set(col,a);(subs[col]||[]).forEach(f=>f(a));
   },
-  newId:()=>FB?db.collection('x').doc().id:'l'+Date.now().toString(36)
+  async get(col,id){if(FB){const d=await db.collection(col).doc(id).get();return d.exists?{id,...d.data()}:null}return(LS.get(col)||[]).find(x=>x.id===id)||null},
+  newId:()=>FB?db.collection('x').doc().id:'l'+Date.now().toString(36)+Math.random().toString(36).slice(2,7)
 };
 
 /* ---------- Laptop data (private) + customer catalog (public, bina cost/serial/account) ---------- */
-let L=[];
-const watch=cb=>Store.on('laptops',a=>{L=a.sort((x,y)=>(y.createdAt||0)-(x.createdAt||0));cb(L)});
-async function saveLaptop(r){
-  r.id=r.id||Store.newId();r.createdAt=r.createdAt||Date.now();
-  await Store.put('laptops',r.id,r);
-  if(r.status!=='sold'&&r.public!==false)
-    await Store.put('catalog',r.id,{brand:r.brand,model:r.model,spec:r.spec||'',condition:r.condition||'',warranty:r.warranty||'',sellPrice:r.sellPrice||0,thumb:r.thumb||'',photos:r.photos||[],createdAt:r.createdAt});
-  else await Store.del('catalog',r.id);
+let L=[],NUM={};
+const watch=cb=>Store.on('laptops',a=>{L=a.sort((x,y)=>(y.createdAt||0)-(x.createdAt||0));[...L].reverse().forEach((l,i)=>NUM[l.id]=l.no||i+1);cb(L)});
+const numOf=l=>NUM[l.id]||l.no||'';
+const fire=jobs=>jobs.forEach(p=>Promise.resolve(p).catch(e=>toast('Could not save: '+e.message)));
+/* ph = new photo list, or undefined when the photos did not change. Photos are stored apart from the laptop so lists stay fast. */
+async function saveLaptop(r,ph){
+  const isNew=!r.id;r.id=r.id||Store.newId();r.createdAt=r.createdAt||Date.now();
+  if(isNew)r.no=Math.max(0,...L.map(x=>x.no||0))+1;
+  const {photos,...doc}=r;if(ph)doc.photoCount=ph.length;else if(doc.photoCount==null)doc.photoCount=photos?photos.length:0;
+  const jobs=[Store.put('laptops',r.id,doc)];
+  if(ph)jobs.push(Store.put('photos',r.id,{list:ph}));
+  jobs.push(r.status!=='sold'&&r.public!==false?Store.put('catalog',r.id,{brand:r.brand,model:r.model,spec:r.spec||'',condition:r.condition||'',warranty:r.warranty||'',sellPrice:r.sellPrice||0,thumb:r.thumb||'',photoCount:doc.photoCount,createdAt:r.createdAt}):Store.del('catalog',r.id));
+  fire(jobs);return r;
 }
+const getPhotos=async l=>l.photos&&l.photos.length?l.photos:((await Store.get('photos',l.id))||{}).list||[];
 const patch=(id,f)=>saveLaptop({...L.find(x=>x.id===id),...f});
-async function delLaptop(id){if(!confirm('Delete this entry permanently?'))return;await Store.del('laptops',id);await Store.del('catalog',id);closeM();toast('Entry deleted')}
+function delLaptop(id){if(!confirm('Delete this entry permanently?'))return;fire([Store.del('laptops',id),Store.del('catalog',id),Store.del('photos',id)]);closeM();toast('Entry deleted')}
 const catalogURL=()=>new URL('catalog.html',location.href).href;
 const copyLink=()=>navigator.clipboard.writeText(catalogURL()).then(()=>toast('Customer link copied'));
 function shareWA(id){const l=L.find(x=>x.id===id);open('https://wa.me/?text='+encodeURIComponent(`${l.brand} ${l.model}\n${l.spec||''}\nPrice: ${money(l.sellPrice)}\nView: ${catalogURL()}#${id}`))}
 const match=(l,q)=>!q||[l.serial,l.brand,l.model,l.spec,l.account,l.order,l.source].join(' ').toLowerCase().includes(q.toLowerCase());
-const row=(l,fn='showDetail')=>`<div class="card item" onclick="${fn}('${l.id}')">${l.thumb?`<img loading="lazy" src="${l.thumb}">`:'<div class="ph"></div>'}<div class="m"><div><b>${esc(l.brand)} ${esc(l.model)}</b></div><div class="sub">SN: ${esc(l.serial)}</div><div class="sub">${esc(l.source)} · ${fdate(l.date)}${l.price?' · '+money(l.price):''}</div></div><span class="tag ${l.status==='sold'?'sd':'ok'}">${l.status==='sold'?'Sold':'Available'}</span></div>`;
+const row=(l,fn='showDetail')=>`<div class="card item" onclick="${fn}('${l.id}')"><span class="num">${numOf(l)}</span>${l.thumb?`<img loading="lazy" decoding="async" src="${l.thumb}">`:'<div class="ph"></div>'}<div class="m"><div><b>${esc(l.brand)} ${esc(l.model)}</b></div><div class="sub">SN: ${esc(l.serial)}</div><div class="sub">${esc(l.source)} · ${fdate(l.date)}${l.price?' · '+money(l.price):''}</div></div><span class="tag ${l.status==='sold'?'sd':'ok'}">${l.status==='sold'?'Sold':'Available'}</span></div>`;
 
 /* ---------- Layout: left sidebar + login ---------- */
-const NAV=[['index.html','entry','New Entry'],['stock.html','stock','Laptop Stock'],['available.html','avail','Available'],['sold.html','sold','Sold'],['settings.html','set','Settings']];
-const IC={entry:'<path d="M12 5v14M5 12h14"/>',stock:'<path d="M3 7l9-4 9 4-9 4-9-4zM3 7v10l9 4 9-4V7"/>',avail:'<path d="M5 12l5 5L20 7"/>',sold:'<path d="M12 3v18M17 7H9.5a3 3 0 000 6h5a3 3 0 010 6H6"/>',set:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>',shop:'<path d="M4 9l1-5h14l1 5M4 9v11h16V9M4 9h16"/>',out:'<path d="M9 4H5v16h4M16 8l4 4-4 4M20 12H9"/>'};
+const NAV=[['index.html','entry','New Entry'],['stock.html','stock','Laptop Stock'],['available.html','avail','Available'],['sold.html','sold','Sold'],['lists.html','list','Lists'],['settings.html','set','Settings']];
+const IC={entry:'<path d="M12 5v14M5 12h14"/>',stock:'<path d="M3 7l9-4 9 4-9 4-9-4zM3 7v10l9 4 9-4V7"/>',avail:'<path d="M5 12l5 5L20 7"/>',sold:'<path d="M12 3v18M17 7H9.5a3 3 0 000 6h5a3 3 0 010 6H6"/>',set:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>',list:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',shop:'<path d="M4 9l1-5h14l1 5M4 9v11h16V9M4 9h16"/>',out:'<path d="M9 4H5v16h4M16 8l4 4-4 4M20 12H9"/>'};
 const ico=k=>`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${IC[k]}</svg>`;
 function boot(start){
+  NAV.forEach(n=>{const l=document.createElement('link');l.rel='prefetch';l.href=n[0];document.head.append(l)});
   const pg=location.pathname.split('/').pop()||'index.html';
   document.body.innerHTML=`<div class="top"><button onclick="$('.side').classList.toggle('open')">☰</button><b>Laptop Stock Manager</b></div>
   <aside class="side"><h1>Laptop Stock Manager</h1>${NAV.map(n=>`<a href="${n[0]}" class="${pg===n[0]?'on':''}">${ico(n[1])}${n[2]}</a>`).join('')}
   <a href="catalog.html" target="_blank">${ico('shop')}Customer Page</a><div class="sp"></div>
-  ${auth?`<a href="#" onclick="auth.signOut();return false">${ico('out')}Logout</a>`:''}<div class="sub" style="padding:8px 12px">${FB?'Online':'Local mode'}</div></aside><main id="app"></main><div id="ov"></div><div id="ov2"></div>`;
+  ${auth?`<a href="#" onclick="auth.signOut();return false">${ico('out')}Logout</a>`:''}<div class="sub" style="padding:8px 12px">${FB?'Online':'Local mode'}</div></aside><main id="app"><div class="card skel"></div><div class="card skel"></div><div class="card skel"></div></main><div id="ov"></div><div id="ov2"></div>`;
   if(!auth)return start();
   let on=0;auth.onAuthStateChanged(u=>{if(u&&!on){on=1;start()}else if(!u){on?location.reload():login()}});
 }
@@ -78,10 +87,11 @@ let PH=[null,null],scanner=null;
 const rd=f=>new Promise(r=>{const x=new FileReader();x.onload=()=>r(x.result);x.readAsDataURL(f)});
 const img=s=>new Promise(r=>{const i=new Image();i.onload=()=>r(i);i.src=s});
 async function shrink(src,max,q){if(typeof src!=='string')src=await rd(src);const i=await img(src),k=Math.min(1,max/Math.max(i.width,i.height)),c=document.createElement('canvas');c.width=i.width*k;c.height=i.height*k;c.getContext('2d').drawImage(i,0,0,c.width,c.height);return c.toDataURL('image/jpeg',q)}
+let PHdirty=false;
 function slotClick(i){
-  if(PH[i]&&confirm('Remove this photo? (Press Cancel to choose a new one)')){PH[i]=null;return drawSlots()}
+  if(PH[i]&&confirm('Remove this photo? (Press Cancel to choose a new one)')){PH[i]=null;PHdirty=true;return drawSlots()}
   const f=document.createElement('input');f.type='file';f.accept='image/*';
-  f.onchange=async()=>{if(f.files[0]){PH[i]=await shrink(f.files[0],800,.65);drawSlots()}};f.click();
+  f.onchange=async()=>{if(!f.files[0])return;const s=$('#slot'+i);if(s)s.innerHTML='Processing...';try{PH[i]=await shrink(f.files[0],800,.65);PHdirty=true}catch(e){toast('Could not read this image')}drawSlots()};f.click();
 }
 const drawSlots=()=>[0,1].forEach(i=>{const s=$('#slot'+i);if(s)s.innerHTML=PH[i]?`<img src="${PH[i]}">`:`Add photo ${i+1}<br>(optional)`});
 async function startScan(id){
@@ -113,28 +123,35 @@ async function readForm(old={}){
   const r={...old,serial:v('serial'),source:v('source'),order:v('order'),account:v('account'),brand:v('brand'),model:v('model'),spec:v('spec'),condition:v('condition'),warranty:v('warranty'),price:+v('price')||0,sellPrice:+v('sellPrice')||0,date:v('date')||today(),note:v('note'),public:v('public')!=='0',status:old.status||'available',photos:PH.filter(Boolean)};
   if(!r.serial||!r.brand||!r.model){toast('Serial number, company and model are required');return null}
   if(L.some(x=>x.id!==old.id&&(x.serial||'').toLowerCase()===r.serial.toLowerCase())){toast('This serial number already exists');return null}
-  r.thumb=r.photos[0]?await shrink(r.photos[0],320,.6):'';return r;
+  r.thumb=PHdirty?(r.photos[0]?await shrink(r.photos[0],260,.55):''):(old.thumb||'');return r;
 }
 
 /* ---------- Detail / Sold / Edit (sab admin pages me shared) ---------- */
 function showDetail(id){
   const l=L.find(x=>x.id===id);if(!l)return;const sold=l.status==='sold',kv=(k,v)=>`<div class="kv"><span>${k}</span><span>${esc(v||'-')}</span></div>`;
-  modal(`<div class="hd"><b style="font-size:18px">${esc(l.brand)} ${esc(l.model)}</b><button onclick="closeM()">✕</button></div>
-  ${l.photos?.length?`<div class="gal">${l.photos.map(p=>`<img src="${p}">`).join('')}</div>`:''}
+  modal(`<div class="hd"><b style="font-size:18px"><span class="sub">#${numOf(l)}</span> ${esc(l.brand)} ${esc(l.model)}</b><button onclick="closeM()">✕</button></div>
+  <div class="gal" id="dg">${l.thumb?`<img src="${l.thumb}">`:''}</div>
   ${kv('Serial number',l.serial)}${kv('Purchased from',l.source)}${kv('Order ID',l.order)}${kv('Purchase account / ID',l.account)}${kv('Company',l.brand)}${kv('Model',l.model)}${kv('Specs',l.spec)}${kv('Condition',l.condition)}${kv('Warranty',l.warranty)}
   ${kv('Purchase price',mp(l.price))}${kv('Selling price',mp(l.sellPrice))}${kv('Entry date',fdate(l.date))}${kv('Note',l.note)}
   ${sold?kv('Sold price',money(l.soldPrice))+kv('Sold date',fdate(l.soldDate))+kv('Sold to',l.buyer)+kv('Profit / Loss',l.price?money(l.soldPrice-l.price):'-'):''}
   <div class="btns">${sold?`<button onclick="patch('${id}',{status:'available',soldPrice:0,soldDate:'',buyer:''});closeM()">Mark as available</button>`:`<button class="p" onclick="sellUI('${id}')">Mark as sold</button><button onclick="shareWA('${id}')">WhatsApp</button>`}
   <button onclick="editUI('${id}')">Edit</button><button class="d" onclick="delLaptop('${id}')">Delete</button></div>`);
+  getPhotos(l).then(p=>{const g=$('#dg');if(g&&p.length)g.innerHTML=p.map(x=>`<img src="${x}">`).join('')}).catch(()=>{});
 }
 function sellUI(id){const l=L.find(x=>x.id===id);
   modal(`<div class="hd"><b>${esc(l.brand)} ${esc(l.model)} — Mark as sold</b><button onclick="closeM()">✕</button></div>
   <label>Sold price (₹)</label><input id="s_p" type="number" inputmode="decimal" value="${l.sellPrice||''}"><label>Date</label><input id="s_d" type="date" value="${today()}"><label>Sold to (optional)</label><input id="s_b">
   <div class="btns"><button onclick="closeM()">Cancel</button><button class="p" onclick="doSell('${id}')">Save</button></div>`)}
 async function doSell(id){const p=+$('#s_p').value;if(!p)return toast('Enter the sold price');await patch(id,{status:'sold',soldPrice:p,soldDate:$('#s_d').value||today(),buyer:$('#s_b').value.trim()});closeM();toast('Marked as sold')}
-function editUI(id){const l=L.find(x=>x.id===id);PH=[l.photos?.[0]||null,l.photos?.[1]||null];
-  modal(`<div class="hd"><b>Edit laptop</b><button onclick="closeM()">✕</button></div>${form(l)}<button class="p" style="width:100%" onclick="doEdit('${id}')">Save changes</button>`);drawSlots()}
-async function doEdit(id){const r=await readForm(L.find(x=>x.id===id));if(!r)return;await saveLaptop(r);closeM();toast('Changes saved')}
+function editUI(id){const l=L.find(x=>x.id===id);PH=[l.photos?.[0]||null,l.photos?.[1]||null];PHdirty=false;
+  modal(`<div class="hd"><b>Edit laptop</b><button onclick="closeM()">✕</button></div>${form(l)}<button class="p" id="sv" style="width:100%" onclick="doEdit('${id}')">Save changes</button>`);drawSlots();
+  if(!(l.photos&&l.photos.length)&&l.photoCount!==0)getPhotos(l).then(p=>{if(!PHdirty&&$('#slot0')){PH=[p[0]||null,p[1]||null];drawSlots()}}).catch(()=>{});
+}
+async function doEdit(id){
+  const b=$('#sv');if(b.disabled)return;b.disabled=true;b.textContent='Saving...';
+  try{const r=await readForm(L.find(x=>x.id===id));if(!r)return;await saveLaptop(r,PHdirty?r.photos:undefined);closeM();toast('Changes saved')}
+  catch(e){toast('Could not save: '+e.message)}finally{const s=$('#sv');if(s){s.disabled=false;s.textContent='Save changes'}}
+}
 function exportCSV(){
   const h=['serial','source','order','account','brand','model','spec','condition','warranty','price','sellPrice','date','status','soldPrice','soldDate','buyer','note'];
   const c=[h.join(',')].concat(L.map(l=>h.map(k=>'"'+String(l[k]??'').replace(/"/g,'""')+'"').join(','))).join('\n');

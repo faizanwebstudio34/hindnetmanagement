@@ -1,7 +1,8 @@
+const dq=debounce(()=>draw());
 let q='',br='',so='new';
 boot(()=>{
   $('#app').innerHTML=`<h2>Available laptops</h2><div id="st" class="stats"></div>
-  <div class="bar"><input placeholder="Search laptops" oninput="q=this.value;draw()"><select id="ab" onchange="br=this.value;draw()"></select>
+  <div class="bar"><input placeholder="Search laptops" oninput="q=this.value;dq()"><select id="ab" onchange="br=this.value;draw()"></select>
   <select onchange="so=this.value;draw()"><option value="new">Newest first</option><option value="old">Oldest first (longest in stock)</option><option value="lo">Price: low to high</option><option value="hi">Price: high to low</option></select>
   <button onclick="copyLink()">Copy customer link</button></div><div id="list" class="grid"></div>`;
   watch(draw);
@@ -13,7 +14,7 @@ function draw(){
   if(sel.dataset.k!==bs.join('|')){sel.dataset.k=bs.join('|');sel.innerHTML=bs.map(b=>`<option value="${esc(b)}" ${b===br?'selected':''}>${b?esc(b):'All companies'}</option>`).join('')}
   const a=av.filter(l=>match(l,q)&&(!br||l.brand===br)).sort((x,y)=>so==='old'?(x.createdAt-y.createdAt):so==='lo'?x.sellPrice-y.sellPrice:so==='hi'?y.sellPrice-x.sellPrice:0);
   $('#list').innerHTML=a.length?a.slice(0,120).map(l=>{const im=l.thumb||l.photos?.[0],pub=l.public!==false,pf=(l.sellPrice||0)-l.price;
-    return `<div class="pc" onclick="showDetail('${l.id}')"><div class="im">${im?`<img loading="lazy" src="${im}">`:'<span class="nopic">No photo</span>'}<span class="tag ${pub?'ok':'sd'} ab">${pub?'Public':'Hidden'}</span></div>
+    return `<div class="pc" onclick="showDetail('${l.id}')"><div class="im">${im?`<img loading="lazy" decoding="async" src="${im}">`:'<span class="nopic">No photo</span>'}<span class="nb">#${numOf(l)}</span><span class="tag ${pub?'ok':'sd'} ab">${pub?'Public':'Hidden'}</span></div>
     <div class="pb"><b>${esc(l.brand)} ${esc(l.model)}</b><div class="sub">${esc(l.spec)}</div><div class="pr"><b>${mp(l.sellPrice)}</b><span class="tag">${esc(l.condition||'')}</span></div>
     <div class="sub">${l.price?'Cost '+money(l.price)+(l.sellPrice?` · <span style="color:var(--${pf>=0?'ok':'no'})">${pf>=0?'+':''}${money(pf)}</span>`:''):'Cost not entered'}</div><div class="sub">${days(l.date)} days in stock · SN ${esc(l.serial)}</div>
     <div class="row2"><button title="Show or hide on the customer catalog" onclick="event.stopPropagation();patch('${l.id}',{public:${!pub}})">${pub?'Hide':'Show'}</button><button onclick="event.stopPropagation();shareWA('${l.id}')">Share</button><button class="p" onclick="event.stopPropagation();sellUI('${l.id}')">Sold</button></div></div></div>`}).join(''):'<div class="card sub w2">No available laptops.</div>';

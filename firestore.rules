@@ -4,6 +4,8 @@ service cloud.firestore {
     // Customer catalog: public read (contains no purchase price, serial number or account details)
     match /catalog/{id} { allow read: if true; allow write: if request.auth != null && request.auth.token.email == 'hind@manage.com'; }
     match /meta/{id}    { allow read: if true; allow write: if request.auth != null && request.auth.token.email == 'hind@manage.com'; }
+    // Photos: readable by exact ID only (customer page detail view); listing is not allowed
+    match /photos/{id} { allow get: if true; allow list: if false; allow write: if request.auth != null && request.auth.token.email == 'hind@manage.com'; }
     // Everything else (laptops = private data): owner only
     match /{document=**} { allow read, write: if request.auth != null && request.auth.token.email == 'hind@manage.com'; }
   }

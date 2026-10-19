@@ -1,3 +1,4 @@
+const dq=debounce(()=>draw());
 let q='',loaded=0;
 const th=()=>{const d=document.documentElement.dataset.theme==='dark';$('#tl').classList.toggle('p',!d);$('#td').classList.toggle('p',d)};
 boot(()=>{
@@ -5,7 +6,7 @@ boot(()=>{
   <div class="card"><b>Theme</b><div class="btns"><button id="tl" onclick="setTheme('light');th()">White</button><button id="td" onclick="setTheme('dark');th()">Black</button></div></div>
   <div class="card"><b>Shop information (shown on the customer catalog)</b><div class="fg"><div><label>Shop name</label><input id="h_name"></div><div><label>WhatsApp number (with country code)</label><input id="h_wa" placeholder="919876543210"></div><div><label>Phone</label><input id="h_phone"></div><div><label>Address</label><input id="h_addr"></div><div class="w2"><label>Tagline</label><input id="h_tag"></div></div>
   <div class="btns"><button class="p" onclick="saveShop()">Save</button><button onclick="copyLink()">Copy customer link</button></div></div>
-  <div class="card"><b>Edit entries and upload photos</b><input style="margin:10px 0" placeholder="Search" oninput="q=this.value;draw()"><div id="list"></div></div>
+  <div class="card"><b>Edit entries and upload photos</b><input style="margin:10px 0" placeholder="Search" oninput="q=this.value;dq()"><div id="list"><div class="card skel"></div><div class="card skel"></div><div class="card skel"></div></div></div>
   <div class="card"><b>Data</b><div class="btns"><button onclick="exportCSV()">Export CSV</button></div></div>`;
   th();watch(draw);
   Store.on('meta',a=>{const s=a.find(x=>x.id==='shop');if(s&&!loaded){loaded=1;h_name.value=s.name||'';h_wa.value=s.wa||'';h_phone.value=s.phone||'';h_addr.value=s.addr||'';h_tag.value=s.tag||''}});

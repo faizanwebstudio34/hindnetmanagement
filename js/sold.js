@@ -1,6 +1,7 @@
+const dq=debounce(()=>draw());
 let q='';
 boot(()=>{
-  $('#app').innerHTML=`<h2>Sold laptops</h2><div id="st" class="stats"></div><div class="bar"><input placeholder="Search laptops" oninput="q=this.value;draw()"></div><div id="list"></div>`;
+  $('#app').innerHTML=`<h2>Sold laptops</h2><div id="st" class="stats"></div><div class="bar"><input placeholder="Search laptops" oninput="q=this.value;dq()"></div><div id="list"><div class="card skel"></div><div class="card skel"></div><div class="card skel"></div></div>`;
   watch(draw);
 });
 function draw(){
