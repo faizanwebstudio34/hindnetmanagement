@@ -1,27 +1,25 @@
 # Laptop Stock Manager
 
+Static web app (HTML/CSS/JS) with a Firebase backend (Firestore + Authentication). No server code and no paid APIs.
+
 ## Pages
-- `index.html` – New entry (barcode scan, purchase details, photos)
-- `stock.html` – All entries with search and filters
-- `available.html` – Available laptops (cards, filters, sorting, margin, visibility toggle)
-- `sold.html` – Sold laptops with revenue and profit/loss
-- `lists.html` – Printable lists: (1) numbered detailed list, (2) model summary with quantity. Print, PDF, image, share
-- `settings.html` – Theme, shop information, edit entries / photos, CSV export
-- `catalog.html` – Public customer catalog (no login; purchase price, serial number and account are never exposed)
+- `dashboard.html` – key numbers, stock by company, stock age, sales per month
+- `index.html` – new entry (barcode / label scan, purchase details, photos)
+- `stock.html` – all entries: numbering, search, filters, select + bulk actions
+- `available.html` – available laptops (cards, margin, show/hide on the customer page)
+- `sold.html` – sold laptops with revenue and profit/loss
+- `lists.html` – printable lists: numbered detailed list and model summary; print, PDF, image, share
+- `settings.html` – theme, shop information, edit entries / photos, CSV export
+- `catalog.html` – public customer catalog (no login; purchase price, serial number and account are never exposed)
 
 ## Setup
-1. In the Firebase console create a project, enable **Firestore Database** (production mode), and enable **Authentication → Email/Password**. Create one user (your email and password).
+1. Firebase console: create a project, enable **Firestore Database** (production mode) and **Authentication → Email/Password**; create one user (your email and password).
 2. Project settings → Web app → copy the config into `js/config.js`.
-3. (Photos are stored in a separate `photos` collection so lists load fast; the rules file already allows this.) In `firestore.rules` replace `hind@manage.com` (3 places) with your email, then paste the rules in Firestore → Rules and publish.
-4. Deploy: `npm i -g firebase-tools && firebase login && firebase init hosting` (public directory: `.`), then `firebase deploy`.
+3. Put your login email in `firestore.rules` (3 places + the photos rule), paste the rules into Firestore → Rules and **Publish** (do this again after every update of this file).
+4. Deploy the folder to any static host (Vercel, Netlify, Firebase Hosting, ...). Add the site domain in Authentication → Settings → Authorized domains.
 5. Open Settings, add the shop name and WhatsApp number, and share `catalog.html` with customers.
 
 Without a config the app runs in local mode (data stays in this browser only).
 
-## AI label scan (free with Google Gemini)
-The "Scan label to auto-fill details" button sends the photo to `/api/scan` (a Vercel serverless function) which reads it with Google Gemini. Barcodes decoded in the browser are used to double-check the serial number. If the function is not configured or the free limit is reached, the app falls back to offline OCR (less accurate).
-1. Open aistudio.google.com, sign in and create an API key (no billing needed for the free tier). Check your project's free limits in the AI Studio rate-limit page.
-2. Vercel → Project → Settings → Environment Variables, add: `GEMINI_API_KEY`, `FIREBASE_API_KEY` (same value as `apiKey` in `js/config.js`); optional `OWNER_EMAIL`, `GEMINI_MODEL`. See `.env.example`.
-3. Redeploy. Only the logged-in owner can call the function.
-
-Note: on the free tier Google may use the submitted images to improve its products. Only photograph labels, not people or personal documents.
+## Label scan (free, offline in the browser)
+Barcode decoding gives the exact serial number. Text on the label is read with Tesseract OCR in the browser (the text data is downloaded once). Always review the fields before saving; you can also tap a detected line to put it into a field.

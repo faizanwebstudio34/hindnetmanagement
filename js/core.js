@@ -47,10 +47,13 @@ async function saveLaptop(r,ph){
   const jobs=[Store.put('laptops',r.id,doc)];
   if(ph)jobs.push(Store.put('photos',r.id,{list:ph}));
   jobs.push(r.status!=='sold'&&r.public!==false?Store.put('catalog',r.id,{brand:r.brand,model:r.model,spec:r.spec||'',condition:r.condition||'',warranty:r.warranty||'',sellPrice:r.sellPrice||0,thumb:r.thumb||'',photoCount:doc.photoCount,createdAt:r.createdAt}):Store.del('catalog',r.id));
-  fire(jobs);return r;
+  const all=Promise.all(jobs);
+  const state=await Promise.race([all.then(()=>'ok'),new Promise(r=>setTimeout(()=>r('slow'),4000))]);
+  if(state==='slow'){all.catch(e=>toast('Not saved to the server: '+e.message));toast('Saved on this device. It will sync when the connection is back.')}
+  return r;
 }
 const getPhotos=async l=>l.photos&&l.photos.length?l.photos:((await Store.get('photos',l.id))||{}).list||[];
-const patch=(id,f)=>saveLaptop({...L.find(x=>x.id===id),...f});
+const patch=(id,f)=>saveLaptop({...L.find(x=>x.id===id),...f}).catch(e=>{toast('Could not save: '+e.message)});
 function delLaptop(id){if(!confirm('Delete this entry permanently?'))return;fire([Store.del('laptops',id),Store.del('catalog',id),Store.del('photos',id)]);closeM();toast('Entry deleted')}
 const catalogURL=()=>new URL('catalog.html',location.href).href;
 const copyLink=()=>navigator.clipboard.writeText(catalogURL()).then(()=>toast('Customer link copied'));
@@ -59,16 +62,17 @@ const match=(l,q)=>!q||[l.serial,l.brand,l.model,l.spec,l.account,l.order,l.sour
 const row=(l,fn='showDetail')=>`<div class="card item" onclick="${fn}('${l.id}')"><span class="num">${numOf(l)}</span>${l.thumb?`<img loading="lazy" decoding="async" src="${l.thumb}">`:'<div class="ph"></div>'}<div class="m"><div><b>${esc(l.brand)} ${esc(l.model)}</b></div><div class="sub">SN: ${esc(l.serial)}</div><div class="sub">${esc(l.source)} · ${fdate(l.date)}${l.price?' · '+money(l.price):''}</div></div><span class="tag ${l.status==='sold'?'sd':'ok'}">${l.status==='sold'?'Sold':'Available'}</span></div>`;
 
 /* ---------- Layout: left sidebar + login ---------- */
-const NAV=[['index.html','entry','New Entry'],['stock.html','stock','Laptop Stock'],['available.html','avail','Available'],['sold.html','sold','Sold'],['lists.html','list','Lists'],['settings.html','set','Settings']];
-const IC={entry:'<path d="M12 5v14M5 12h14"/>',stock:'<path d="M3 7l9-4 9 4-9 4-9-4zM3 7v10l9 4 9-4V7"/>',avail:'<path d="M5 12l5 5L20 7"/>',sold:'<path d="M12 3v18M17 7H9.5a3 3 0 000 6h5a3 3 0 010 6H6"/>',set:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>',list:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',shop:'<path d="M4 9l1-5h14l1 5M4 9v11h16V9M4 9h16"/>',out:'<path d="M9 4H5v16h4M16 8l4 4-4 4M20 12H9"/>'};
+const NAV=[['dashboard.html','dash','Dashboard'],['index.html','entry','New Entry'],['stock.html','stock','Laptop Stock'],['available.html','avail','Available'],['sold.html','sold','Sold'],['lists.html','list','Lists'],['settings.html','set','Settings']];
+const IC={dash:'<rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/>',entry:'<path d="M12 5v14M5 12h14"/>',stock:'<path d="M3 7l9-4 9 4-9 4-9-4zM3 7v10l9 4 9-4V7"/>',avail:'<path d="M5 12l5 5L20 7"/>',sold:'<path d="M12 3v18M17 7H9.5a3 3 0 000 6h5a3 3 0 010 6H6"/>',set:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>',list:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',shop:'<path d="M4 9l1-5h14l1 5M4 9v11h16V9M4 9h16"/>',out:'<path d="M9 4H5v16h4M16 8l4 4-4 4M20 12H9"/>'};
 const ico=k=>`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${IC[k]}</svg>`;
 function boot(start){
   NAV.forEach(n=>{const l=document.createElement('link');l.rel='prefetch';l.href=n[0];document.head.append(l)});
   const pg=location.pathname.split('/').pop()||'index.html';
   document.body.innerHTML=`<div class="top"><button onclick="$('.side').classList.toggle('open')">☰</button><b>Laptop Stock Manager</b></div>
-  <aside class="side"><h1>Laptop Stock Manager</h1>${NAV.map(n=>`<a href="${n[0]}" class="${pg===n[0]?'on':''}">${ico(n[1])}${n[2]}</a>`).join('')}
+  <aside class="side"><h1>Laptop Stock</h1>${NAV.map(n=>`<a href="${n[0]}" class="${pg===n[0]?'on':''}">${ico(n[1])}${n[2]}</a>`).join('')}
   <a href="catalog.html" target="_blank">${ico('shop')}Customer Page</a><div class="sp"></div>
-  ${auth?`<a href="#" onclick="auth.signOut();return false">${ico('out')}Logout</a>`:''}<div class="sub" style="padding:8px 12px">${FB?'Online':'Local mode'}</div></aside><main id="app"><div class="card skel"></div><div class="card skel"></div><div class="card skel"></div></main><div id="ov"></div><div id="ov2"></div>`;
+  ${auth?`<a href="#" onclick="auth.signOut();return false">${ico('out')}Logout</a>`:''}<div class="sub" style="padding:8px 12px">${FB?'Online':'Local mode'}</div></aside><div id="net" class="net" hidden>You are offline. Changes are kept on this device and will sync when you are back online.</div><main id="app"><div class="card skel"></div><div class="card skel"></div><div class="card skel"></div></main><div id="ov"></div><div id="ov2"></div>`;
+  const nu=()=>{const n=$('#net');if(n)n.hidden=navigator.onLine};addEventListener('online',nu);addEventListener('offline',nu);nu();
   if(!auth)return start();
   let on=0;auth.onAuthStateChanged(u=>{if(u&&!on){on=1;start()}else if(!u){on?location.reload():login()}});
 }
@@ -142,7 +146,7 @@ function sellUI(id){const l=L.find(x=>x.id===id);
   modal(`<div class="hd"><b>${esc(l.brand)} ${esc(l.model)} — Mark as sold</b><button onclick="closeM()">✕</button></div>
   <label>Sold price (₹)</label><input id="s_p" type="number" inputmode="decimal" value="${l.sellPrice||''}"><label>Date</label><input id="s_d" type="date" value="${today()}"><label>Sold to (optional)</label><input id="s_b">
   <div class="btns"><button onclick="closeM()">Cancel</button><button class="p" onclick="doSell('${id}')">Save</button></div>`)}
-async function doSell(id){const p=+$('#s_p').value;if(!p)return toast('Enter the sold price');await patch(id,{status:'sold',soldPrice:p,soldDate:$('#s_d').value||today(),buyer:$('#s_b').value.trim()});closeM();toast('Marked as sold')}
+async function doSell(id){const p=+$('#s_p').value;if(!p)return toast('Enter the sold price');if(await patch(id,{status:'sold',soldPrice:p,soldDate:$('#s_d').value||today(),buyer:$('#s_b').value.trim()}))toast('Marked as sold');closeM()}
 function editUI(id){const l=L.find(x=>x.id===id);PH=[l.photos?.[0]||null,l.photos?.[1]||null];PHdirty=false;
   modal(`<div class="hd"><b>Edit laptop</b><button onclick="closeM()">✕</button></div>${form(l)}<button class="p" id="sv" style="width:100%" onclick="doEdit('${id}')">Save changes</button>`);drawSlots();
   if(!(l.photos&&l.photos.length)&&l.photoCount!==0)getPhotos(l).then(p=>{if(!PHdirty&&$('#slot0')){PH=[p[0]||null,p[1]||null];drawSlots()}}).catch(()=>{});

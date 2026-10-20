@@ -1,16 +1,6 @@
 let st='available',so='date',cp='',tab='list',shop={};
 const dq=debounce(()=>draw());
 const stText={available:'Available laptops',sold:'Sold laptops',all:'All laptops'};
-boot(()=>{
-  $('#app').innerHTML=`<h2>Lists</h2>
-  <div class="seg"><button id="t_list" class="on" onclick="tabTo('list')">Detailed list</button><button id="t_sum" onclick="tabTo('sum')">Model summary</button></div>
-  <div class="bar"><select onchange="st=this.value;draw()" aria-label="Status"><option value="available">Available laptops</option><option value="sold">Sold laptops</option><option value="all">All laptops</option></select>
-  <select id="l_c" onchange="cp=this.value;draw()" aria-label="Company"></select>
-  <select id="l_o" onchange="so=this.value;draw()" aria-label="Order"><option value="date">Order of entry</option><option value="brand">Company / model</option></select></div>
-  <div class="btns lact"><button onclick="print()">Print</button><button onclick="doPDF()">Download PDF</button><button onclick="doImg()">Download image</button><button class="p" onclick="doShare()">Share</button></div>
-  <div class="sw"><div id="sheet" class="sheet"></div></div>`;
-  watch(draw);Store.on('meta',a=>{shop=a.find(x=>x.id==='shop')||{};draw()});
-});
 function tabTo(t){tab=t;$('#t_list').classList.toggle('on',t==='list');$('#t_sum').classList.toggle('on',t==='sum');$('#l_o').style.display=t==='list'?'':'none';draw()}
 function rows(){
   const a=L.filter(l=>(st==='all'||(st==='sold')===(l.status==='sold'))&&(!cp||l.brand===cp));
@@ -63,3 +53,14 @@ async function doShare(){
   }catch(e){if(e&&e.name==='AbortError')return}
   open('https://wa.me/?text='+encodeURIComponent(listText().slice(0,1800)));toast('Sharing files is not supported here. Opened WhatsApp with the list as text.');
 }
+
+boot(()=>{
+  $('#app').innerHTML=`<h2>Lists</h2>
+  <div class="seg"><button id="t_list" class="on" onclick="tabTo('list')">Detailed list</button><button id="t_sum" onclick="tabTo('sum')">Model summary</button></div>
+  <div class="bar"><select onchange="st=this.value;draw()" aria-label="Status"><option value="available">Available laptops</option><option value="sold">Sold laptops</option><option value="all">All laptops</option></select>
+  <select id="l_c" onchange="cp=this.value;draw()" aria-label="Company"></select>
+  <select id="l_o" onchange="so=this.value;draw()" aria-label="Order"><option value="date">Order of entry</option><option value="brand">Company / model</option></select></div>
+  <div class="btns lact"><button onclick="print()">Print</button><button onclick="doPDF()">Download PDF</button><button onclick="doImg()">Download image</button><button class="p" onclick="doShare()">Share</button></div>
+  <div class="sw"><div id="sheet" class="sheet"></div></div>`;
+  watch(draw);Store.on('meta',a=>{shop=a.find(x=>x.id==='shop')||{};draw()});
+});

@@ -10,7 +10,7 @@ boot(()=>{
 function draw(){
   const av=L.filter(x=>x.status!=='sold'),cost=av.reduce((s,x)=>s+x.price,0),sell=av.reduce((s,x)=>s+(x.sellPrice||0),0),pr=av.filter(x=>x.price&&x.sellPrice).reduce((s,x)=>s+x.sellPrice-x.price,0),vis=av.filter(x=>x.public!==false).length,c=(n,t)=>`<div class="card"><b>${n}</b><span class="sub">${t}</span></div>`;
   $('#st').innerHTML=c(av.length,'Available')+c(money(cost),'Cost value')+c(money(sell),'Selling value')+c(money(pr),'Estimated profit')+c(vis,'Visible to customers');
-  const bs=['']+[...new Set(av.map(x=>x.brand))].sort(),sel=$('#ab');
+  const bs=['',...[...new Set(av.map(x=>x.brand))].sort()],sel=$('#ab');
   if(sel.dataset.k!==bs.join('|')){sel.dataset.k=bs.join('|');sel.innerHTML=bs.map(b=>`<option value="${esc(b)}" ${b===br?'selected':''}>${b?esc(b):'All companies'}</option>`).join('')}
   const a=av.filter(l=>match(l,q)&&(!br||l.brand===br)).sort((x,y)=>so==='old'?(x.createdAt-y.createdAt):so==='lo'?x.sellPrice-y.sellPrice:so==='hi'?y.sellPrice-x.sellPrice:0);
   $('#list').innerHTML=a.length?a.slice(0,120).map(l=>{const im=l.thumb||l.photos?.[0],pub=l.public!==false,pf=(l.sellPrice||0)-l.price;
