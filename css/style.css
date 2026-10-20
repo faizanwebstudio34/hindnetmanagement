@@ -112,3 +112,4 @@ button:active{transform:scale(.97)}
 .br2{display:grid;grid-template-columns:96px 1fr 38px;gap:10px;align-items:center;margin:8px 0;font-size:13px}.br2 span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--mut)}
 .br2 div{height:10px;border-radius:6px;background:var(--bg);overflow:hidden}.br2 i{display:block;height:100%;border-radius:6px;background:linear-gradient(90deg,var(--pri),#06b6d4);transition:width .6s cubic-bezier(.2,.8,.2,1)}.br2 b{text-align:right}
 .chips.wrap{flex-wrap:wrap;overflow:visible}.chips.wrap button{padding:5px 12px;font-size:13px}
+.sh-n{margin-top:6px;text-align:right;color:#475569;font-size:12px}
