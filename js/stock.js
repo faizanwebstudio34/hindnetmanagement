@@ -9,7 +9,7 @@ function draw(){
     .sort(so==='old'?(x,y)=>(x.createdAt||0)-(y.createdAt||0):so==='price'?(x,y)=>(y.sellPrice||0)-(x.sellPrice||0):(x,y)=>(y.createdAt||0)-(x.createdAt||0));
   VIEW=a;
   $('#list').innerHTML=a.length?a.slice(0,150).map(l=>row(l,selMode?'tog':'showDetail').replace('class="card item"',`class="card item${SEL.has(l.id)?' sel':''}"`)).join('')+(a.length>150?'<div class="sub">Showing the first 150. Use search or filters to narrow down.</div>':''):'<div class="card sub">No laptops found.</div>';
-  $('#bulk').hidden=!selMode;$('#bn').textContent=SEL.size+' selected';$('#sm').textContent=selMode?'Done':'Select';
+  document.body.classList.toggle('selmode',selMode);$('#bulk').hidden=!selMode;$('#bn').textContent=SEL.size+' selected';$('#sm').textContent=selMode?'Done':'Select';
 }
 const tog=id=>{SEL.has(id)?SEL.delete(id):SEL.add(id);draw()};
 const toggleSel=()=>{selMode=!selMode;if(!selMode)SEL.clear();draw()};

@@ -11,11 +11,11 @@ const setTheme=t=>{document.documentElement.dataset.theme=t;localStorage.setItem
 const toggleTheme=()=>setTheme(document.documentElement.dataset.theme==='dark'?'light':'dark');
 setTheme(localStorage.getItem('theme')||'light');
 function toast(m){const t=document.createElement('div');t.className='toast';t.textContent=m;document.body.append(t);setTimeout(()=>t.remove(),2200)}
-const loadJS=u=>new Promise(r=>{const s=document.createElement('script');s.src=u;s.onload=r;document.head.append(s)});
+const loadJS=u=>new Promise((res,rej)=>{const s=document.createElement('script');s.src=u;s.onload=res;s.onerror=()=>rej(new Error('Could not load '+u.split('/').pop()));document.head.append(s)});
 
 /* ---------- Backend: Firestore (offline cache on) ya localStorage ---------- */
 const FB=!!CFG.apiKey&&typeof firebase!=='undefined';let db,auth;
-if(FB){firebase.initializeApp(CFG);db=firebase.firestore();db.enablePersistence({synchronizeTabs:true}).catch(()=>{});if(typeof firebase.auth==='function')auth=firebase.auth()}
+if(FB){firebase.initializeApp(CFG);db=firebase.firestore();try{db.settings({experimentalAutoDetectLongPolling:true,merge:true})}catch(e){}db.enablePersistence({synchronizeTabs:true}).catch(()=>{});if(typeof firebase.auth==='function')auth=firebase.auth()}
 const subs={};
 const Store={
   on(col,cb){
@@ -68,21 +68,39 @@ const ico=k=>`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke
 function boot(start){
   NAV.forEach(n=>{const l=document.createElement('link');l.rel='prefetch';l.href=n[0];document.head.append(l)});
   const pg=location.pathname.split('/').pop()||'index.html';
-  document.body.innerHTML=`<div class="top"><button onclick="$('.side').classList.toggle('open')">☰</button><b>Laptop Stock Manager</b></div>
+  document.body.innerHTML=`<div class="top"><button onclick="toggleMenu()" aria-label="Menu">☰</button><b>Laptop Stock Manager</b></div>
   <aside class="side"><h1>Laptop Stock</h1>${NAV.map(n=>`<a href="${n[0]}" class="${pg===n[0]?'on':''}">${ico(n[1])}${n[2]}</a>`).join('')}
   <a href="catalog.html" target="_blank">${ico('shop')}Customer Page</a><div class="sp"></div>
-  ${auth?`<a href="#" onclick="auth.signOut();return false">${ico('out')}Logout</a>`:''}<div class="sub" style="padding:8px 12px">${FB?'Online':'Local mode'}</div></aside><div id="net" class="net" hidden>You are offline. Changes are kept on this device and will sync when you are back online.</div><main id="app"><div class="card skel"></div><div class="card skel"></div><div class="card skel"></div></main><div id="ov"></div><div id="ov2"></div>`;
+  ${auth?`<a href="#" onclick="auth.signOut();return false">${ico('out')}Logout</a>`:''}<div class="sub" style="padding:8px 12px">${FB?'Online':'Local mode'}</div></aside><div class="scrim" onclick="toggleMenu()"></div><div id="net" class="net" hidden>You are offline. Changes are kept on this device and will sync when you are back online.</div><main id="app"><div class="card skel"></div><div class="card skel"></div><div class="card skel"></div></main><div id="ov"></div><div id="ov2"></div>`;
+  ['#ov','#ov2'].forEach(s=>new MutationObserver(lockSync).observe($(s),{childList:true}));
   const nu=()=>{const n=$('#net');if(n)n.hidden=navigator.onLine};addEventListener('online',nu);addEventListener('offline',nu);nu();
   if(!auth)return start();
   let on=0;auth.onAuthStateChanged(u=>{if(u&&!on){on=1;start()}else if(!u){on?location.reload():login()}});
 }
 function login(){$('#app').innerHTML=`<div class="card" style="max-width:360px;margin:12vh auto"><h2>Login</h2><label>Email</label><input id="le" type="email"><label>Password</label><input id="lp" type="password" onkeydown="event.key==='Enter'&&doLogin()"><button class="p" style="width:100%;margin-top:14px" onclick="doLogin()">Login</button></div>`}
 const doLogin=()=>auth.signInWithEmailAndPassword($('#le').value,$('#lp').value).catch(()=>toast('Incorrect email or password'));
+addEventListener('pageshow',e=>{if(e.persisted)location.reload()});
+const toggleMenu=()=>{const o=$('.side').classList.toggle('open');$('.scrim').classList.toggle('on',o)};
+const lockSync=()=>document.documentElement.classList.toggle('lock',!!(($('#ov')||{}).innerHTML||($('#ov2')||{}).innerHTML));
+const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+/* File inputs must live in the page on iOS Safari, otherwise the change event can be lost. */
+function pickFile(o,cb){
+  document.querySelectorAll('input.tmpf').forEach(e=>e.remove());
+  const f=document.createElement('input');f.type='file';f.accept='image/*';f.className='tmpf';f.style.cssText='position:fixed;left:-9999px;top:0;opacity:0';
+  if(o.capture)f.capture='environment';if(o.multiple)f.multiple=true;
+  f.onchange=()=>{const fs=[...f.files];f.remove();if(fs.length)cb(fs)};document.body.append(f);f.click();
+}
+/* Saving files: iOS gets the share sheet (Save to Files), other browsers a normal download. */
+async function saveBlob(blob,name,type){
+  const f=new File([blob],name,{type});
+  if(isIOS&&navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f],title:name});return}catch(e){if(e&&e.name==='AbortError')return}}
+  const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;a.style.display='none';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),30000);
+}
 const modal=h=>{$('#ov').innerHTML=`<div class="modal" onclick="if(event.target===this)closeM()"><div>${h}</div></div>`};
 const closeM=()=>{const o=$('#ov');if(o)o.innerHTML=''};
 const modal2=h=>{$('#ov2').innerHTML=`<div class="modal" onclick="if(event.target===this)closeM2()"><div>${h}</div></div>`};
 const closeM2=()=>{const o=$('#ov2');if(o)o.innerHTML=''};
-async function smartScan(){if(typeof scanUI==='undefined')await loadJS('js/scan.js');scanUI()}
+async function smartScan(){try{if(typeof scanUI==='undefined')await loadJS('js/scan.js?v=8');scanUI()}catch(e){toast('Could not open the scanner. Please reload the page.')}}
 
 /* ---------- Form, photos, scan ---------- */
 const SRC=['Amazon','Flipkart','Meesho','Croma','Offline / Other'],CON=['New','Open box','Refurbished','Used'];
@@ -94,13 +112,12 @@ async function shrink(src,max,q){if(typeof src!=='string')src=await rd(src);cons
 let PHdirty=false;
 function slotClick(i){
   if(PH[i]&&confirm('Remove this photo? (Press Cancel to choose a new one)')){PH[i]=null;PHdirty=true;return drawSlots()}
-  const f=document.createElement('input');f.type='file';f.accept='image/*';
-  f.onchange=async()=>{if(!f.files[0])return;const s=$('#slot'+i);if(s)s.innerHTML='Processing...';try{PH[i]=await shrink(f.files[0],800,.65);PHdirty=true}catch(e){toast('Could not read this image')}drawSlots()};f.click();
+  pickFile({},async fs=>{const s=$('#slot'+i);if(s)s.innerHTML='Processing...';try{PH[i]=await shrink(fs[0],800,.65);PHdirty=true}catch(e){toast('Could not read this image')}drawSlots()});
 }
 const drawSlots=()=>[0,1].forEach(i=>{const s=$('#slot'+i);if(s)s.innerHTML=PH[i]?`<img src="${PH[i]}">`:`Add photo ${i+1}<br>(optional)`});
 async function startScan(id){
   modal2('<div class="hd"><b>Scan barcode</b><button onclick="stopScan()">✕</button></div><div id="reader"></div>');
-  if(typeof Html5Qrcode==='undefined')await loadJS('https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js');
+  if(typeof Html5Qrcode==='undefined'){try{await loadJS('https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js')}catch(e){toast('Could not load the scanner. Check your internet connection.');return closeM2()}}
   scanner=new Html5Qrcode('reader');
   scanner.start({facingMode:'environment'},{fps:10,qrbox:{width:260,height:140}},t=>{$('#'+id).value=t.trim();stopScan();toast('Barcode scanned')}).catch(()=>{toast('Unable to open the camera (HTTPS and camera permission are required)');stopScan()});
 }
@@ -159,5 +176,5 @@ async function doEdit(id){
 function exportCSV(){
   const h=['serial','source','order','account','brand','model','spec','condition','warranty','price','sellPrice','date','status','soldPrice','soldDate','buyer','note'];
   const c=[h.join(',')].concat(L.map(l=>h.map(k=>'"'+String(l[k]??'').replace(/"/g,'""')+'"').join(','))).join('\n');
-  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+c],{type:'text/csv'}));a.download='laptops.csv';a.click();
+  saveBlob(new Blob(['\ufeff'+c],{type:'text/csv'}),'laptops.csv','text/csv');
 }

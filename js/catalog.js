@@ -62,15 +62,16 @@ function cdet(id){
   <div class="acts">${wnum()?`<a class="btn p lg" target="_blank" href="${wlink(l)}">${ci('chat')} Enquire on WhatsApp</a>`:''}${shop.phone?`<a class="btn lg" href="tel:${esc(shop.phone)}">${ci('phone')} Call</a>`:''}
   <button class="btn" onclick="shareL('${id}')">${ci('share')} Share</button><button class="btn" id="sbtn" data-id="${id}" onclick="toggleSave('${id}')">${ci('heart',18,sv(id)?'currentColor':'none')} ${sv(id)?'Saved':'Save'}</button></div>
   <p class="note">Price and availability are subject to change. Please message us to confirm before visiting.</p></div></div></div></div>`;
-  document.body.style.overflow='hidden';
+  document.documentElement.classList.add('lock');
   if(!(l.photos&&l.photos.length)&&l.photoCount>0)Store.get('photos',id).then(d=>{const g=$('#gl');if(g&&d&&d.list&&d.list.length)g.innerHTML=gal(d.list,l)}).catch(()=>{});
 }
 function zoomMove(e){const m=$('#mi'),i=$('#mimg');if(!i||!m.classList.contains('zm'))return;const r=m.getBoundingClientRect();i.style.transformOrigin=((e.clientX-r.left)/r.width*100)+'% '+((e.clientY-r.top)/r.height*100)+'%'}
 function swapImg(b){$('#mimg').src=b.firstElementChild.src;document.querySelectorAll('.th').forEach(x=>x.classList.toggle('on',x===b))}
-function closeD(){$('#ov').innerHTML='';document.body.style.overflow='';history.replaceState(null,'',location.pathname+location.search)}
+function closeD(){$('#ov').innerHTML='';document.documentElement.classList.remove('lock');history.replaceState(null,'',location.pathname+location.search)}
 function shareL(id){const l=C.find(x=>x.id===id),u=location.origin+location.pathname+'#'+id;navigator.share?navigator.share({title:l.brand+' '+l.model,url:u}).catch(()=>{}):navigator.clipboard.writeText(u).then(()=>toast('Link copied'))}
 addEventListener('keydown',e=>{if(e.key==='Escape')closeD()});
 addEventListener('scroll',()=>$('#nav').classList.toggle('sc',scrollY>10),{passive:true});
+addEventListener('hashchange',()=>{opened=false;deep()});
 function deep(){if(opened||location.hash.length<2)return;const id=decodeURIComponent(location.hash.slice(1));if(C.some(x=>x.id===id)){opened=true;cdet(id)}}
 
 Store.on('meta',a=>{

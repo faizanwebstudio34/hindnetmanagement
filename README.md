@@ -23,3 +23,6 @@ Without a config the app runs in local mode (data stays in this browser only).
 
 ## Label scan (free, offline in the browser)
 Barcode decoding gives the exact serial number. Text on the label is read with Tesseract OCR in the browser (the text data is downloaded once). Always review the fields before saving; you can also tap a detected line to put it into a field.
+
+## iPhone / iPad
+Open the site in Safari, tap Share → **Add to Home Screen** to use it like an app. Camera features need HTTPS (any normal host provides it). PDF / image downloads open the iOS share sheet (choose **Save to Files**).

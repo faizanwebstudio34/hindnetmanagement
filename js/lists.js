@@ -54,13 +54,19 @@ async function doPDF(){
     didDrawPage:h=>{d.setFontSize(8);d.setTextColor(120);d.text('Page '+h.pageNumber,W-70,H-20)}});
   const y=Math.min(d.lastAutoTable.finalY+20,H-52);d.setFontSize(10);d.setTextColor(20);d.text(t.total,40,y);
   if(t.note){d.setFontSize(9);d.setTextColor(90);d.text(d.splitTextToSize(t.note,W-80),40,y+15)}
-  d.save(fname()+'.pdf');
+  await saveBlob(d.output('blob'),fname()+'.pdf','application/pdf');
+}
+function doPrint(){
+  const w=window.open('','_blank');if(!w)return toast('Please allow pop-ups to print');
+  let done=0;const go=()=>{if(done++)return;w.focus();w.print()};
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(table().title)}</title><link rel="stylesheet" href="${new URL('css/style.css?v=8',location.href).href}"><style>body{background:#fff;margin:0;padding:12px}.sheet{min-width:0!important;padding:0!important;border:0!important}@page{size:A4;margin:12mm}</style></head><body>${$('#sheet').outerHTML}</body></html>`);
+  w.document.close();w.onload=go;setTimeout(go,1500);
 }
 async function sheetBlob(){
   if(!window.html2canvas)await loadJS('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
-  const c=await html2canvas($('#sheet'),{scale:2,backgroundColor:'#ffffff'});return new Promise(r=>c.toBlob(r,'image/png'));
+  const el=$('#sheet'),sc=Math.max(1,Math.min(2,Math.sqrt(14e6/(el.offsetWidth*el.offsetHeight))));const c=await html2canvas(el,{scale:sc,backgroundColor:'#ffffff'});return new Promise(r=>c.toBlob(r,'image/png'));
 }
-async function doImg(){toast('Preparing image...');const b=await sheetBlob(),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=fname()+'.png';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
+async function doImg(){toast('Preparing image...');await saveBlob(await sheetBlob(),fname()+'.png','image/png')}
 function listText(){const t=table();return [shop.name||'Laptop Stock',t.title+' - '+sub(),'',...t.body.map(t.line),'',t.total,t.note].filter((x,i,a)=>x!==''||a[i-1]!=='').join('\n')}
 async function doShare(){
   try{
@@ -69,6 +75,8 @@ async function doShare(){
   }catch(e){if(e&&e.name==='AbortError')return}
   open('https://wa.me/?text='+encodeURIComponent(listText().slice(0,1800)));toast('Sharing files is not supported here. Opened WhatsApp with the list as text.');
 }
+const safe=f=>async(...a)=>{try{await f(...a)}catch(e){toast('Could not create the file. Check your internet connection and try again.')}};
+doPDF=safe(doPDF);doImg=safe(doImg);
 boot(()=>{
   $('#app').innerHTML=`<h2>Lists</h2>
   <div class="seg"><button id="t_list" class="on" onclick="tabTo('list')">Detailed list</button><button id="t_sum" onclick="tabTo('sum')">Model summary</button><button id="t_date" onclick="tabTo('date')">By date</button></div>
@@ -77,7 +85,7 @@ boot(()=>{
   <div class="bar"><select id="l_s" onchange="st=this.value;draw()" aria-label="Status"><option value="available">Available laptops</option><option value="sold">Sold laptops</option><option value="all">All laptops</option></select>
   <select id="l_c" onchange="cp=this.value;draw()" aria-label="Company"></select>
   <select id="l_o" onchange="so=this.value;draw()" aria-label="Order"><option value="date">Order of entry</option><option value="brand">Company / model</option></select></div>
-  <div class="btns lact"><button onclick="print()">Print</button><button onclick="doPDF()">Download PDF</button><button onclick="doImg()">Download image</button><button class="p" onclick="doShare()">Share</button></div>
+  <div class="btns lact"><button onclick="doPrint()">Print</button><button onclick="doPDF()">Download PDF</button><button onclick="doImg()">Download image</button><button class="p" onclick="doShare()">Share</button></div>
   <div class="sw"><div id="sheet" class="sheet"></div></div>`;
   watch(draw);Store.on('meta',a=>{shop=a.find(x=>x.id==='shop')||{};draw()});
 });

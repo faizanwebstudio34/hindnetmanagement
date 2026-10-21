@@ -41,7 +41,7 @@ function scanUI(){
   <div class="btns"><button class="p" onclick="scanPick(true)">Take photo</button><button onclick="scanPick(false)">Choose image(s)</button></div>
   <div id="sc_out"></div><div id="rd" style="display:none"></div>`);
 }
-function scanPick(cam){const f=document.createElement('input');f.type='file';f.accept='image/*';if(cam)f.capture='environment';else f.multiple=true;f.onchange=()=>f.files.length&&scanRun([...f.files].slice(0,3));f.click()}
+function scanPick(cam){pickFile({capture:cam,multiple:!cam},fs=>scanRun(fs.slice(0,3)))}
 async function readCodes(f){
   const out=[];
   try{if('BarcodeDetector' in window){const bmp=await createImageBitmap(f);(await new BarcodeDetector().detect(bmp)).forEach(b=>out.push(b.rawValue))}}catch(e){}
