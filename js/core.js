@@ -1,5 +1,5 @@
 const $=(s,r=document)=>r.querySelector(s);
-const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const today=()=>new Date().toISOString().slice(0,10);
 const money=n=>n||n===0?'₹'+Number(n).toLocaleString('en-IN'):'-';
 const fdate=d=>d?new Date(d).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'-';
@@ -10,17 +10,27 @@ const LS={get:k=>JSON.parse(localStorage.getItem(k)||'null'),set:(k,v)=>{try{loc
 const setTheme=t=>{document.documentElement.dataset.theme=t;localStorage.setItem('theme',t)};
 const toggleTheme=()=>setTheme(document.documentElement.dataset.theme==='dark'?'light':'dark');
 setTheme(localStorage.getItem('theme')||'light');
-function toast(m){const t=document.createElement('div');t.className='toast';t.textContent=m;document.body.append(t);setTimeout(()=>t.remove(),2200)}
+let ERRS=[];
+function showErr(m){
+  if(!m||/ResizeObserver|^Script error\.?$/.test(m))return;ERRS.push(m);
+  let b=document.getElementById('errbar');if(!b){b=document.createElement('div');b.id='errbar';b.className='errbar';document.body.append(b)}
+  b.innerHTML='<b>Something went wrong</b><div>'+esc(m)+'</div><div class="eb"><button onclick="copyErr()">Copy details</button><button onclick="document.getElementById(\'errbar\').remove();ERRS=[]">Dismiss</button></div>';
+}
+function copyErr(){const t=ERRS.join('\n')+'\n'+navigator.userAgent;try{navigator.clipboard.writeText(t).then(()=>toast('Copied'))}catch(e){toast(t.slice(0,90))}}
+addEventListener('error',e=>showErr((e.message||'Error')+(e.filename?' ('+e.filename.split('/').pop()+':'+e.lineno+')':'')));
+addEventListener('unhandledrejection',e=>showErr(String(e.reason&&e.reason.message||e.reason)));
+function toast(m){document.querySelectorAll('.toast').forEach(x=>x.remove());const t=document.createElement('div');t.className='toast';t.textContent=m;document.body.append(t);setTimeout(()=>t.remove(),2200)}
 const loadJS=u=>new Promise((res,rej)=>{const s=document.createElement('script');s.src=u;s.onload=res;s.onerror=()=>rej(new Error('Could not load '+u.split('/').pop()));document.head.append(s)});
 
 /* ---------- Backend: Firestore (offline cache on) ya localStorage ---------- */
+const FBFAIL=!!CFG.apiKey&&typeof firebase==='undefined';
 const FB=!!CFG.apiKey&&typeof firebase!=='undefined';let db,auth;
 if(FB){firebase.initializeApp(CFG);db=firebase.firestore();try{db.settings({experimentalAutoDetectLongPolling:true,merge:true})}catch(e){}db.enablePersistence({synchronizeTabs:true}).catch(()=>{});if(typeof firebase.auth==='function')auth=firebase.auth()}
 const subs={};
 const Store={
   on(col,cb){
     if(FB)return db.collection(col).onSnapshot(s=>cb(s.docs.map(d=>({id:d.id,...d.data()}))),e=>toast('Firebase: '+e.message));
-    (subs[col]??=[]).push(cb);cb(LS.get(col)||[]);addEventListener('storage',e=>e.key===col&&cb(LS.get(col)||[]));
+    (subs[col]=subs[col]||[]).push(cb);cb(LS.get(col)||[]);addEventListener('storage',e=>e.key===col&&cb(LS.get(col)||[]));
   },
   async put(col,id,data){
     if(FB)return db.collection(col).doc(id).set(data,{merge:true});
@@ -36,7 +46,38 @@ const Store={
 
 /* ---------- Laptop data (private) + customer catalog (public, bina cost/serial/account) ---------- */
 let L=[],NUM={};
-const watch=cb=>Store.on('laptops',a=>{L=a.sort((x,y)=>(y.createdAt||0)-(x.createdAt||0));[...L].reverse().forEach((l,i)=>NUM[l.id]=l.no||i+1);cb(L)});
+let IDP='HN',metaW=false,idT=null,idBusy=null,idAgain=false;
+const pad=n=>String(n).padStart(4,'0');
+const watch=cb=>{
+  if(!metaW){metaW=true;Store.on('meta',a=>{const s=a.find(x=>x.id==='shop');if(s&&s.idPrefix)IDP=s.idPrefix})}
+  return Store.on('laptops',a=>{L=a.sort((x,y)=>(y.createdAt||0)-(x.createdAt||0));[...L].reverse().forEach((l,i)=>NUM[l.id]=l.no||i+1);cb(L);clearTimeout(idT);idT=setTimeout(()=>assignIds(),700)});
+};
+/* Gives every laptop without an ID the next number from ONE shared counter (Firestore transaction),
+   so IDs are unique across phones/computers and a number is never handed out twice, even after a delete. */
+async function idPass(){
+  const todo=L.filter(l=>!l.uid).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0)).map(l=>l.id);
+  for(let i=0;i<todo.length;i+=20){
+    const ids=todo.slice(i,i+20);
+    if(FB){
+      await db.runTransaction(async t=>{
+        const cref=db.collection('meta').doc('counter'),refs=ids.map(id=>db.collection('laptops').doc(id));
+        const r=await Promise.all([t.get(cref)].concat(refs.map(x=>t.get(x))));
+        let n=r[0].exists?(r[0].data().n||0):0,k=0;
+        refs.forEach((ref,j)=>{const s=r[j+1];if(!s.exists)return;const d=s.data();if(d.uid)return;n++;k++;const uid=IDP+pad(n);t.update(ref,{uid});if(d.public!==false&&d.status!=='sold')t.set(db.collection('catalog').doc(ids[j]),{uid},{merge:true})});
+        if(k)t.set(cref,{n});
+      });
+    }else{
+      let n=LS.get('idCounter')||0;
+      for(const id of ids){const x=(LS.get('laptops')||[]).find(y=>y.id===id);if(!x||x.uid)continue;n++;LS.set('idCounter',n);const uid=IDP+pad(n);await Store.put('laptops',id,{uid});if(x.public!==false&&x.status!=='sold')await Store.put('catalog',id,{uid})}
+    }
+  }
+}
+function assignIds(){
+  if(idBusy){idAgain=true;return idBusy}
+  idBusy=(async()=>{try{do{idAgain=false;await idPass()}while(idAgain)}catch(e){/* offline: tried again on the next change */}finally{idBusy=null}})();
+  return idBusy;
+}
+const waitUid=async(id,ms=6000)=>{const t0=Date.now();while(Date.now()-t0<ms){const l=L.find(x=>x.id===id);if(l&&l.uid)return l.uid;await new Promise(r=>setTimeout(r,150))}return ''};
 const numOf=l=>NUM[l.id]||l.no||'';
 const fire=jobs=>jobs.forEach(p=>Promise.resolve(p).catch(e=>toast('Could not save: '+e.message)));
 /* ph = new photo list, or undefined when the photos did not change. Photos are stored apart from the laptop so lists stay fast. */
@@ -46,10 +87,11 @@ async function saveLaptop(r,ph){
   const {photos,...doc}=r;if(ph)doc.photoCount=ph.length;else if(doc.photoCount==null)doc.photoCount=photos?photos.length:0;
   const jobs=[Store.put('laptops',r.id,doc)];
   if(ph)jobs.push(Store.put('photos',r.id,{list:ph}));
-  jobs.push(r.status!=='sold'&&r.public!==false?Store.put('catalog',r.id,{brand:r.brand,model:r.model,spec:r.spec||'',condition:r.condition||'',warranty:r.warranty||'',sellPrice:r.sellPrice||0,thumb:r.thumb||'',photoCount:doc.photoCount,createdAt:r.createdAt}):Store.del('catalog',r.id));
+  jobs.push(r.status!=='sold'&&r.public!==false?Store.put('catalog',r.id,{brand:r.brand,model:r.model,spec:r.spec||'',condition:r.condition||'',warranty:r.warranty||'',sellPrice:r.sellPrice||0,uid:r.uid||'',thumb:r.thumb||'',photoCount:doc.photoCount,createdAt:r.createdAt}):Store.del('catalog',r.id));
   const all=Promise.all(jobs);
   const state=await Promise.race([all.then(()=>'ok'),new Promise(r=>setTimeout(()=>r('slow'),4000))]);
-  if(state==='slow'){all.catch(e=>toast('Not saved to the server: '+e.message));toast('Saved on this device. It will sync when the connection is back.')}
+  if(state==='ok')assignIds();else all.then(()=>assignIds()).catch(()=>{});
+  if(state==='slow'){all.catch(e=>toast('Not saved to the server: '+e.message));r.__slow=true;toast('Saved on this device. It will sync when the connection is back.')}
   return r;
 }
 const getPhotos=async l=>l.photos&&l.photos.length?l.photos:((await Store.get('photos',l.id))||{}).list||[];
@@ -58,8 +100,8 @@ function delLaptop(id){if(!confirm('Delete this entry permanently?'))return;fire
 const catalogURL=()=>new URL('catalog.html',location.href).href;
 const copyLink=()=>navigator.clipboard.writeText(catalogURL()).then(()=>toast('Customer link copied'));
 function shareWA(id){const l=L.find(x=>x.id===id);open('https://wa.me/?text='+encodeURIComponent(`${l.brand} ${l.model}\n${l.spec||''}\nPrice: ${money(l.sellPrice)}\nView: ${catalogURL()}#${id}`))}
-const match=(l,q)=>!q||[l.serial,l.brand,l.model,l.spec,l.account,l.order,l.source].join(' ').toLowerCase().includes(q.toLowerCase());
-const row=(l,fn='showDetail')=>`<div class="card item" onclick="${fn}('${l.id}')"><span class="num">${numOf(l)}</span>${l.thumb?`<img loading="lazy" decoding="async" src="${l.thumb}">`:'<div class="ph"></div>'}<div class="m"><div><b>${esc(l.brand)} ${esc(l.model)}</b></div><div class="sub">SN: ${esc(l.serial)}</div><div class="sub">${esc(l.source)} · ${fdate(l.date)}${l.price?' · '+money(l.price):''}</div></div><span class="tag ${l.status==='sold'?'sd':'ok'}">${l.status==='sold'?'Sold':'Available'}</span></div>`;
+const match=(l,q)=>!q||[l.uid,l.serial,l.brand,l.model,l.spec,l.account,l.order,l.source].join(' ').toLowerCase().includes(q.toLowerCase());
+const row=(l,fn='showDetail')=>`<div class="card item" onclick="${fn}('${l.id}')"><span class="num">${numOf(l)}</span>${l.thumb?`<img loading="lazy" decoding="async" src="${l.thumb}">`:'<div class="ph"></div>'}<div class="m"><div><b>${esc(l.brand)} ${esc(l.model)}</b></div><div class="sub">${l.uid?`<b class="uid">${esc(l.uid)}</b> · `:''}SN: ${esc(l.serial)}</div><div class="sub">${esc(l.source)} · ${fdate(l.date)}${l.price?' · '+money(l.price):''}</div></div><span class="tag ${l.status==='sold'?'sd':'ok'}">${l.status==='sold'?'Sold':'Available'}</span></div>`;
 
 /* ---------- Layout: left sidebar + login ---------- */
 const NAV=[['dashboard.html','dash','Dashboard'],['index.html','entry','New Entry'],['stock.html','stock','Laptop Stock'],['available.html','avail','Available'],['sold.html','sold','Sold'],['lists.html','list','Lists'],['settings.html','set','Settings']];
@@ -73,12 +115,13 @@ function boot(start){
   <a href="catalog.html" target="_blank">${ico('shop')}Customer Page</a><div class="sp"></div>
   ${auth?`<a href="#" onclick="auth.signOut();return false">${ico('out')}Logout</a>`:''}<div class="sub" style="padding:8px 12px">${FB?'Online':'Local mode'}</div></aside><div class="scrim" onclick="toggleMenu()"></div><div id="net" class="net" hidden>You are offline. Changes are kept on this device and will sync when you are back online.</div><main id="app"><div class="card skel"></div><div class="card skel"></div><div class="card skel"></div></main><div id="ov"></div><div id="ov2"></div>`;
   ['#ov','#ov2'].forEach(s=>new MutationObserver(lockSync).observe($(s),{childList:true}));
-  const nu=()=>{const n=$('#net');if(n)n.hidden=navigator.onLine};addEventListener('online',nu);addEventListener('offline',nu);nu();
+  const nu=()=>{const n=$('#net');if(n&&!FBFAIL)n.hidden=navigator.onLine};
+  if(FBFAIL){const n=$('#net');n.textContent='Cannot reach Firebase: its scripts were blocked or you are offline. Data is NOT being saved online. Turn off content blockers / VPN / Private Relay for this site, then reload.';n.hidden=false;n.style.background='#b91c1c'}addEventListener('online',nu);addEventListener('offline',nu);nu();
   if(!auth)return start();
   let on=0;auth.onAuthStateChanged(u=>{if(u&&!on){on=1;start()}else if(!u){on?location.reload():login()}});
 }
-function login(){$('#app').innerHTML=`<div class="card" style="max-width:360px;margin:12vh auto"><h2>Login</h2><label>Email</label><input id="le" type="email"><label>Password</label><input id="lp" type="password" onkeydown="event.key==='Enter'&&doLogin()"><button class="p" style="width:100%;margin-top:14px" onclick="doLogin()">Login</button></div>`}
-const doLogin=()=>auth.signInWithEmailAndPassword($('#le').value,$('#lp').value).catch(()=>toast('Incorrect email or password'));
+function login(){$('#app').innerHTML=`<form class="card" style="max-width:360px;margin:12vh auto" onsubmit="doLogin();return false"><h2>Login</h2><label>Email</label><input id="le" name="email" type="email" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email" required><label>Password</label><input id="lp" name="password" type="password" autocomplete="current-password" required><button class="p" type="submit" style="width:100%;margin-top:14px">Login</button></form>`}
+const doLogin=()=>auth.signInWithEmailAndPassword($('#le').value.trim(),$('#lp').value).catch(e=>toast(e&&e.code==='auth/network-request-failed'?'No internet connection':e&&e.code==='auth/too-many-requests'?'Too many attempts. Try again later':'Incorrect email or password'));
 addEventListener('pageshow',e=>{if(e.persisted)location.reload()});
 const toggleMenu=()=>{const o=$('.side').classList.toggle('open');$('.scrim').classList.toggle('on',o)};
 const lockSync=()=>document.documentElement.classList.toggle('lock',!!(($('#ov')||{}).innerHTML||($('#ov2')||{}).innerHTML));
@@ -100,7 +143,7 @@ const modal=h=>{$('#ov').innerHTML=`<div class="modal" onclick="if(event.target=
 const closeM=()=>{const o=$('#ov');if(o)o.innerHTML=''};
 const modal2=h=>{$('#ov2').innerHTML=`<div class="modal" onclick="if(event.target===this)closeM2()"><div>${h}</div></div>`};
 const closeM2=()=>{const o=$('#ov2');if(o)o.innerHTML=''};
-async function smartScan(){try{if(typeof scanUI==='undefined')await loadJS('js/scan.js?v=8');scanUI()}catch(e){toast('Could not open the scanner. Please reload the page.')}}
+async function smartScan(){try{if(typeof scanUI==='undefined')await loadJS('js/scan.js?v=9');scanUI()}catch(e){toast('Could not open the scanner. Please reload the page.')}}
 
 /* ---------- Form, photos, scan ---------- */
 const SRC=['Amazon','Flipkart','Meesho','Croma','Offline / Other'],CON=['New','Open box','Refurbished','Used'];
@@ -124,6 +167,7 @@ async function startScan(id){
 function stopScan(){const d=()=>{scanner=null;closeM2()};scanner?scanner.stop().then(d,d):d()}
 function form(l={}){return `<div class="card"><div class="fg">
 <div class="w2" style="margin-bottom:6px"><button type="button" class="p" style="width:100%" onclick="smartScan()">Scan label to auto-fill details</button><div class="sub" style="margin-top:6px">Photograph the sticker on the back of the laptop or on the box. Serial number, company, model and specs are filled in automatically. Review them before saving.</div></div>
+${l.uid?`<div class="w2"><label>Laptop ID (automatic, cannot be changed)</label><input value="${esc(l.uid)}" readonly></div>`:''}
 <div class="w2"><label>Serial number *</label><div class="row"><input id="f_serial" value="${esc(l.serial)}" placeholder="Scan or type the serial number" onkeydown="if(event.key==='Enter')event.preventDefault()"><button type="button" class="fx" onclick="startScan('f_serial')">Scan</button></div></div>
 <div><label>Purchased from</label><select id="f_source">${opt(SRC,l.source)}</select></div>
 <div><label>Order ID</label><input id="f_order" value="${esc(l.order)}"></div>
@@ -150,9 +194,9 @@ async function readForm(old={}){
 /* ---------- Detail / Sold / Edit (sab admin pages me shared) ---------- */
 function showDetail(id){
   const l=L.find(x=>x.id===id);if(!l)return;const sold=l.status==='sold',kv=(k,v)=>`<div class="kv"><span>${k}</span><span>${esc(v||'-')}</span></div>`;
-  modal(`<div class="hd"><b style="font-size:18px"><span class="sub">#${numOf(l)}</span> ${esc(l.brand)} ${esc(l.model)}</b><button onclick="closeM()">✕</button></div>
+  modal(`<div class="hd"><b style="font-size:18px"><span class="uid">${esc(l.uid||'#'+numOf(l))}</span> ${esc(l.brand)} ${esc(l.model)}</b><button onclick="closeM()">✕</button></div>
   <div class="gal" id="dg">${l.thumb?`<img src="${l.thumb}">`:''}</div>
-  ${kv('Serial number',l.serial)}${kv('Purchased from',l.source)}${kv('Order ID',l.order)}${kv('Purchase account / ID',l.account)}${kv('Company',l.brand)}${kv('Model',l.model)}${kv('Specs',l.spec)}${kv('Condition',l.condition)}${kv('Warranty',l.warranty)}
+  ${kv('Laptop ID',l.uid)}${kv('Serial number',l.serial)}${kv('Purchased from',l.source)}${kv('Order ID',l.order)}${kv('Purchase account / ID',l.account)}${kv('Company',l.brand)}${kv('Model',l.model)}${kv('Specs',l.spec)}${kv('Condition',l.condition)}${kv('Warranty',l.warranty)}
   ${kv('Purchase price',mp(l.price))}${kv('Selling price',mp(l.sellPrice))}${kv('Entry date',fdate(l.date))}${kv('Note',l.note)}
   ${sold?kv('Sold price',money(l.soldPrice))+kv('Sold date',fdate(l.soldDate))+kv('Sold to',l.buyer)+kv('Profit / Loss',l.price?money(l.soldPrice-l.price):'-'):''}
   <div class="btns">${sold?`<button onclick="patch('${id}',{status:'available',soldPrice:0,soldDate:'',buyer:''});closeM()">Mark as available</button>`:`<button class="p" onclick="sellUI('${id}')">Mark as sold</button><button onclick="shareWA('${id}')">WhatsApp</button>`}
@@ -164,7 +208,7 @@ function sellUI(id){const l=L.find(x=>x.id===id);
   <label>Sold price (₹)</label><input id="s_p" type="number" inputmode="decimal" value="${l.sellPrice||''}"><label>Date</label><input id="s_d" type="date" value="${today()}"><label>Sold to (optional)</label><input id="s_b">
   <div class="btns"><button onclick="closeM()">Cancel</button><button class="p" onclick="doSell('${id}')">Save</button></div>`)}
 async function doSell(id){const p=+$('#s_p').value;if(!p)return toast('Enter the sold price');if(await patch(id,{status:'sold',soldPrice:p,soldDate:$('#s_d').value||today(),buyer:$('#s_b').value.trim()}))toast('Marked as sold');closeM()}
-function editUI(id){const l=L.find(x=>x.id===id);PH=[l.photos?.[0]||null,l.photos?.[1]||null];PHdirty=false;
+function editUI(id){const l=L.find(x=>x.id===id);PH=[(l.photos||[])[0]||null,(l.photos||[])[1]||null];PHdirty=false;
   modal(`<div class="hd"><b>Edit laptop</b><button onclick="closeM()">✕</button></div>${form(l)}<button class="p" id="sv" style="width:100%" onclick="doEdit('${id}')">Save changes</button>`);drawSlots();
   if(!(l.photos&&l.photos.length)&&l.photoCount!==0)getPhotos(l).then(p=>{if(!PHdirty&&$('#slot0')){PH=[p[0]||null,p[1]||null];drawSlots()}}).catch(()=>{});
 }
@@ -174,7 +218,7 @@ async function doEdit(id){
   catch(e){toast('Could not save: '+e.message)}finally{const s=$('#sv');if(s){s.disabled=false;s.textContent='Save changes'}}
 }
 function exportCSV(){
-  const h=['serial','source','order','account','brand','model','spec','condition','warranty','price','sellPrice','date','status','soldPrice','soldDate','buyer','note'];
-  const c=[h.join(',')].concat(L.map(l=>h.map(k=>'"'+String(l[k]??'').replace(/"/g,'""')+'"').join(','))).join('\n');
+  const h=['uid','serial','source','order','account','brand','model','spec','condition','warranty','price','sellPrice','date','status','soldPrice','soldDate','buyer','note'];
+  const c=[h.join(',')].concat(L.map(l=>h.map(k=>'"'+String(l[k]==null?'':l[k]).replace(/"/g,'""')+'"').join(','))).join('\n');
   saveBlob(new Blob(['\ufeff'+c],{type:'text/csv'}),'laptops.csv','text/csv');
 }

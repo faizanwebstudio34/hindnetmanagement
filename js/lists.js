@@ -22,13 +22,14 @@ function groups(a){
 const sub=()=>`${stText[st]}${cp?' · '+cp:''} · ${tab==='date'?'Generated':''} ${fdate(today())}`.replace('  ',' ');
 function table(){
   const a=rows(),n=a.length,s=n===1?'':'s',g=groups(a);
-  if(tab==='list')return{title:'Laptop Stock List',head:['No.','Serial No.','Company','Model','Specs','Order ID','Date'],body:a.map((l,i)=>[i+1,l.serial||'',l.brand||'',l.model||'',l.spec||'',l.order||'',fdate(l.date)]),total:`Total: ${n} laptop${s}`,note:'',line:r=>`${r[0]}. ${r[2]} ${r[3]} | SN ${r[1]} | ${r[4]} | Order ${r[5]} | ${r[6]}`};
+  const det=(l,i,range)=>[i+1,l.uid||'',l.serial||'',l.brand||'',l.model||'',l.spec||'',l.order||'',...(range?[fdate(l.date)]:[])];
+  const dline=r=>`${r[0]}. ${r[1]?r[1]+' | ':''}${r[3]} ${r[4]} | SN ${r[2]} | ${r[5]} | Order ${r[6]}${r[7]?' | '+r[7]:''}`;
+  if(tab==='list')return{title:'Laptop Stock List',head:['No.','ID','Serial No.','Company','Model','Specs','Order ID','Date'],body:a.map((l,i)=>det(l,i,true)),total:`Total: ${n} laptop${s}`,note:'',line:dline};
   if(tab==='date'){
     const range=lo()!==hi();
-    return{title:range?`Laptops received: ${fdate(lo())} to ${fdate(hi())}`:`Laptops received on ${fdate(lo())}`,head:['No.','Serial No.','Company','Model','Specs','Order ID',...(range?['Date']:[])],
-      body:a.map((l,i)=>[i+1,l.serial||'',l.brand||'',l.model||'',l.spec||'',l.order||'',...(range?[fdate(l.date)]:[])]),total:`Total: ${n} laptop${s} received`,
-      note:g.length?'Model-wise: '+g.slice(0,8).map(x=>`${x.brand} ${x.model} x${x.qty}`).join(', ')+(g.length>8?', ...':''):'',
-      line:r=>`${r[0]}. ${r[2]} ${r[3]} | SN ${r[1]} | ${r[4]} | Order ${r[5]}${r[6]?' | '+r[6]:''}`};
+    return{title:range?`Laptops received: ${fdate(lo())} to ${fdate(hi())}`:`Laptops received on ${fdate(lo())}`,head:['No.','ID','Serial No.','Company','Model','Specs','Order ID',...(range?['Date']:[])],
+      body:a.map((l,i)=>det(l,i,range)),total:`Total: ${n} laptop${s} received`,
+      note:g.length?'Model-wise: '+g.slice(0,8).map(x=>`${x.brand} ${x.model} x${x.qty}`).join(', ')+(g.length>8?', ...':''):'',line:dline};
   }
   return{title:'Laptop Models Summary',head:['No.','Company','Model','Specs','Qty'],body:g.map((x,i)=>[i+1,x.brand,x.model,x.spec,x.qty]),total:`Total: ${n} laptop${s} in ${g.length} model${g.length===1?'':'s'}`,note:'',line:r=>`${r[0]}. ${r[1]} ${r[2]} - ${r[3]} x${r[4]}`};
 }
@@ -59,7 +60,7 @@ async function doPDF(){
 function doPrint(){
   const w=window.open('','_blank');if(!w)return toast('Please allow pop-ups to print');
   let done=0;const go=()=>{if(done++)return;w.focus();w.print()};
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(table().title)}</title><link rel="stylesheet" href="${new URL('css/style.css?v=8',location.href).href}"><style>body{background:#fff;margin:0;padding:12px}.sheet{min-width:0!important;padding:0!important;border:0!important}@page{size:A4;margin:12mm}</style></head><body>${$('#sheet').outerHTML}</body></html>`);
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(table().title)}</title><link rel="stylesheet" href="${new URL('css/style.css?v=9',location.href).href}"><style>body{background:#fff;margin:0;padding:12px}.sheet{min-width:0!important;padding:0!important;border:0!important}@page{size:A4;margin:12mm}</style></head><body>${$('#sheet').outerHTML}</body></html>`);
   w.document.close();w.onload=go;setTimeout(go,1500);
 }
 async function sheetBlob(){

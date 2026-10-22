@@ -2,7 +2,7 @@ const CI={search:'<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',heart:
 const ci=(k,s=18,f='none')=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="${f}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${CI[k]}</svg>`;
 let C=[],shop={},q='',br='',cond='',mx=null,pmax=10000,so='new',onlySaved=false,BR=[],CO=[],opened=false,saved=LS.get('saved')||[];
 const seen=new Set(),sv=id=>saved.includes(id),wnum=()=>(shop.wa||'').replace(/\D/g,'');
-const wlink=l=>`https://wa.me/${wnum()}?text=`+encodeURIComponent(l?`Hello, I am interested in the ${l.brand} ${l.model}${l.sellPrice?' ('+money(l.sellPrice)+')':''}. Is it still available?`:'Hello, I would like to know more about your laptops.');
+const wlink=l=>`https://wa.me/${wnum()}?text=`+encodeURIComponent(l?`Hello, I am interested in the ${l.brand} ${l.model}${l.sellPrice?' ('+money(l.sellPrice)+')':''}. Is it still available?${l.uid?' (Ref '+l.uid+')':''}`:'Hello, I would like to know more about your laptops.');
 const specs=l=>(l.spec||'').split(',').map(s=>s.trim()).filter(Boolean);
 const sk='<div class="cp sk in seen"><div class="im"></div><div class="pb"><i></i><i></i><i style="width:60%"></i></div></div>'.repeat(6);
 
@@ -41,24 +41,24 @@ function draw(){
   const a=C.filter(l=>(!br||l.brand===br)&&(!cond||l.condition===cond)&&(!fl||(l.sellPrice&&l.sellPrice<=mx))&&(!onlySaved||sv(l.id))&&(!qq||[l.brand,l.model,l.spec,l.condition].join(' ').toLowerCase().includes(qq)))
     .sort((x,y)=>so==='lo'?(x.sellPrice||1e12)-(y.sellPrice||1e12):so==='hi'?(y.sellPrice||0)-(x.sellPrice||0):(y.createdAt||0)-(x.createdAt||0));
   $('#cnt').textContent=`${a.length} of ${C.length} laptops${onlySaved?' (saved)':''}`;
-  $('#cl').innerHTML=a.length?a.map((l,i)=>{const im=l.thumb||l.photos?.[0];
+  $('#cl').innerHTML=a.length?a.map((l,i)=>{const im=l.thumb||(l.photos||[])[0];
     return `<article class="cp rv ${seen.has(l.id)?'in seen':''}" data-id="${l.id}" style="--d:${(i%6)*70}ms" onclick="cdet('${l.id}')"><div class="im">${im?`<img loading="lazy" src="${im}" alt="${esc(l.brand+' '+l.model)}">`:ci('laptop',56)}
     ${l.condition?`<span class="bd">${esc(l.condition)}</span>`:''}${days(l.createdAt)<8?'<span class="nw">New arrival</span>':''}
     <button class="hb ${sv(l.id)?'on':''}" data-id="${l.id}" onclick="event.stopPropagation();toggleSave('${l.id}')" aria-label="Save">${ci('heart',18,sv(l.id)?'currentColor':'none')}</button></div>
     <div class="pb"><div class="br">${esc(l.brand)}</div><h3>${esc(l.model)}</h3><div class="chp">${specs(l).slice(0,4).map(s=>`<span>${esc(s)}</span>`).join('')}</div>
     <div class="pf"><div class="price">${l.sellPrice?money(l.sellPrice):'Ask for price'}</div><span class="go">View details →</span></div></div></article>`}).join('')
-    :`<div class="empty">${ci('laptop',56)}<h3>${C.length?'No laptops match your filters':'New stock is arriving soon'}</h3><p>${C.length?'Try a different search or clear the filters.':'Please check back shortly or message us on WhatsApp.'}</p></div>`;
+    :`<div class="empty">${ci('laptop',56)}<h3>${FBFAIL?'Cannot load the catalog':C.length?'No laptops match your filters':'New stock is arriving soon'}</h3><p>${FBFAIL?'Please check your internet connection and reload the page.':C.length?'Try a different search or clear the filters.':'Please check back shortly or message us on WhatsApp.'}</p></div>`;
   reveal();
 }
 const gal=(ph,l)=>`<div class="mi" id="mi" onclick="$('#mi').classList.toggle('zm')" onmousemove="zoomMove(event)">${ph.length?`<img id="mimg" src="${ph[0]}" alt="${esc(l.brand+' '+l.model)}">`:ci('laptop',72)}</div>${ph.length>1?`<div class="ths">${ph.map((p,i)=>`<button class="th ${i?'':'on'}" onclick="swapImg(this)"><img src="${p}" alt=""></button>`).join('')}</div>`:''}`;
 function cdet(id){
   const l=C.find(x=>x.id===id);if(!l)return;history.replaceState(null,'','#'+id);
-  const ph=l.photos?.length?l.photos:(l.thumb?[l.thumb]:[]),kv=(k,v)=>v?`<div class="kv"><span>${k}</span><b>${esc(v)}</b></div>`:'',d=days(l.createdAt);
+  const ph=(l.photos&&l.photos.length)?l.photos:(l.thumb?[l.thumb]:[]),kv=(k,v)=>v?`<div class="kv"><span>${k}</span><b>${esc(v)}</b></div>`:'',d=days(l.createdAt);
   $('#ov').innerHTML=`<div class="cmo" onclick="if(event.target===this)closeD()"><div class="cmd" role="dialog" aria-modal="true"><button class="x" onclick="closeD()" aria-label="Close">${ci('x',20)}</button>
   <div class="cg"><div id="gl">${gal(ph,l)}</div>
   <div class="ci"><div class="br">${esc(l.brand)}</div><h2>${esc(l.model)}</h2><div class="price big">${l.sellPrice?money(l.sellPrice):'Ask for price'}</div>
   <div class="chp">${specs(l).map(s=>`<span>${esc(s)}</span>`).join('')}</div>
-  <div class="kvs">${kv('Condition',l.condition)}${kv('Warranty',l.warranty)}${kv('Listed',d<1?'Today':d+(d===1?' day ago':' days ago'))}</div>
+  <div class="kvs">${kv('Reference',l.uid)}${kv('Condition',l.condition)}${kv('Warranty',l.warranty)}${kv('Listed',d<1?'Today':d+(d===1?' day ago':' days ago'))}</div>
   <div class="acts">${wnum()?`<a class="btn p lg" target="_blank" href="${wlink(l)}">${ci('chat')} Enquire on WhatsApp</a>`:''}${shop.phone?`<a class="btn lg" href="tel:${esc(shop.phone)}">${ci('phone')} Call</a>`:''}
   <button class="btn" onclick="shareL('${id}')">${ci('share')} Share</button><button class="btn" id="sbtn" data-id="${id}" onclick="toggleSave('${id}')">${ci('heart',18,sv(id)?'currentColor':'none')} ${sv(id)?'Saved':'Save'}</button></div>
   <p class="note">Price and availability are subject to change. Please message us to confirm before visiting.</p></div></div></div></div>`;
